@@ -15,10 +15,12 @@ import com.chen.battle.impl.Battle;
 import com.chen.battle.message.res.ResEnterRoomMessage;
 import com.chen.battle.structs.BattleContext;
 import com.chen.battle.structs.BattleUserInfo;
+import com.chen.battle.structs.CVector2D;
 import com.chen.battle.structs.EBattleServerState;
 import com.chen.battle.structs.EBattleState;
 import com.chen.battle.structs.EBattleType;
 import com.chen.battle.structs.RoomMemberData;
+import com.chen.battle.structs.SSHero;
 import com.chen.battle.structs.SSPlayer;
 import com.chen.match.manager.MatchManager;
 import com.chen.match.structs.EBattleMatchType;
@@ -90,6 +92,31 @@ public class BattleManager
 		if (nRet == 0)
 		{
 			log.error("匹配开始失败："+player.getId());
+		}
+	}
+	/**
+	 * 玩家请求移动
+	 * @param player
+	 * @param dir
+	 */
+	public void askMove(SSPlayer player,CVector2D dir)
+	{
+		SSHero hero = player.sHero;
+		if (hero != null)
+		{
+			hero.AskMoveDir(dir);
+		}
+	}
+	/**
+	 * 玩家请求停止移动
+	 * @param player
+	 */
+	public void askStopMove(SSPlayer player)
+	{
+		SSHero hero = player.sHero;
+		if (hero != null)
+		{
+			hero.AskStopMove();
 		}
 	}
 	/**

@@ -18,6 +18,10 @@ import com.chen.match.message.req.ReqAutoMatchMessage;
 import com.chen.match.message.req.ReqRemoveMatchMessage;
 import com.chen.match.message.req.ReqStartMatchMessage;
 import com.chen.message.Message;
+import com.chen.move.handler.ReqAskMoveHandler;
+import com.chen.move.handler.ReqAskStopMoveHandler;
+import com.chen.move.message.req.ReqAskMoveMessage;
+import com.chen.move.message.req.ReqAskStopMoveMessage;
 import com.chen.server.handler.ResRegisterGateHandler;
 import com.chen.server.message.res.ResRegisterGateMessage;
 
@@ -36,6 +40,8 @@ public class MessagePool
 		register(1009, ReqRemoveMatchMessage.class, ReqRemoveMatchHandler.class);
 		register(1015, ReqSelectHeroMessage.class, ReqSelectHeroHandler.class);
 		register(1019, ReqEnterSceneMessage.class, ReqEnterSceneHandler.class);
+		register(1021, ReqAskMoveMessage.class , ReqAskMoveHandler.class);
+		register(1026, ReqAskStopMoveMessage.class , ReqAskStopMoveHandler.class);
 	}
 	private void register(int id,Class<?> messageClass,Class<?> handlerClass)
 	{

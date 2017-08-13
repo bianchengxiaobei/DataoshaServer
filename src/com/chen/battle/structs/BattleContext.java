@@ -1,25 +1,27 @@
 package com.chen.battle.structs;
 
-import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import javax.swing.DebugGraphics;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.omg.PortableServer.ID_ASSIGNMENT_POLICY_ID;
 
+import com.chen.battle.message.res.ResBattleTipMessage;
 import com.chen.battle.message.res.ResEnterSceneMessage;
 import com.chen.battle.message.res.ResGamePrepareMessage;
 import com.chen.battle.message.res.ResSceneLoadedMessage;
 import com.chen.battle.message.res.ResSelectHeroMessage;
-import com.chen.player.manager.PlayerManager;
+import com.chen.message.Message;
+import com.chen.move.manager.SSMoveManager;
+import com.chen.move.struct.ColVector;
+import com.chen.move.struct.EAskStopMoveType;
 import com.chen.player.structs.Player;
 import com.chen.server.BattleServer;
 import com.chen.server.config.BattleConfig;
@@ -34,11 +36,15 @@ public class BattleContext extends BattleServer
 	private long battleId;
 	private long battleStateTime;
 	private BattleUserInfo[] m_battleUserInfo = new BattleUserInfo[maxMemberCount];
-	private int m_battleHero;//战斗中英雄的数量
+	
+	public Map<Long, SSGameUnit> gameObjectMap = new HashMap<>();
+	public Set<EBattleTipType> tipSet = new HashSet<>();
+	public SSMoveManager moveManager;
+
 	public static final int maxMemberCount = 6; 
 	public static final int timeLimit = 200000;
 	public static final int prepareTimeLimit = 5000;
-	public static final int loadTimeLimit = 10000;
+	public static final int loadTimeLimit = 100000;
 	public EBattleType getBattleType() {
 		return battleType;
 	}
@@ -68,6 +74,7 @@ public class BattleContext extends BattleServer
 		super("战斗-"+battleId,configs);
 		this.battleId = battleId;
 		this.battleType = type;
+		this.moveManager = new SSMoveManager();
 	}
 	
 	@Override
@@ -180,11 +187,14 @@ public class BattleContext extends BattleServer
 		{
 			for (int i=0;i<this.m_battleUserInfo.length;i++)
 			{
-//				if (this.m_battleUserInfo[i].getPlayerId() != 0 && !this.m_battleUserInfo[i].isLoadCompleted())
-//				{
-//					bIfAllPlayerConnect = false;
-//					break;
-//				}
+				if (this.m_battleUserInfo[i] != null)
+				{
+					if (this.m_battleUserInfo[i].bIsLoadedComplete == false)
+					{
+						bIfAllPlayerConnect = false;
+						break;
+					}
+				}
 			}
 		}
 		if (bIfAllPlayerConnect == false)
@@ -200,27 +210,16 @@ public class BattleContext extends BattleServer
 			{
 				continue;
 			}
-//			int count = this.m_battleUserInfo[i].getSelectedBeastList().size();
-//			if (count <= 0)
-//			{
-//				return;
-//			}
-//			for (int j=0;j<count;j++)
-//			{
-//				SSBeast beast = this.AddBeast(this.m_battleUserInfo[i], j);			
-//				this.m_battleHero++;
-//				if (beast == null)
-//				{
-//					System.err.println("添加神兽到战场中失败");
-//					break;
-//				}
-//				//beast.ChangeMP(0, (byte)0);
-//				beast.ChangeHp(0, (byte)0);
-//				//beast.ChangeCP(100, false);
-//				this.ssBeastList.add(beast);				
-//			}		
+			SSPlayer user = this.m_battleUserInfo[i].sPlayer;
+			CVector2D bornPos = new CVector2D(0, 0);//这里需要通过配置文件加载
+			CVector2D dir = new CVector2D(1, 0);
+			SSHero hero = null;
+			hero = AddHero(user.player.getId(), bornPos, dir, user, this.m_battleUserInfo[i].selectedHeroId);
+			this.m_battleUserInfo[i].sHero = hero;
+			//通知玩家游戏开始战斗倒计时
+			BoradTipsByType(EBattleTipType.eTips_ObjAppear, this.m_battleUserInfo[i].sPlayer.player);
 		}
-		//通知玩家游戏开始消息
+		
 		this.PostStartGameMsg();
 		this.setBattleState(EBattleServerState.eSSBS_Playing);
 	}
@@ -234,6 +233,30 @@ public class BattleContext extends BattleServer
 		{
 			this.setBattleState(EBattleServerState.eSSBS_Loading, true);
 		}
+	}
+	public void BoradTipsByType(EBattleTipType type,Player player)
+	{
+		boolean flag = false;
+		if (!this.tipSet.contains(type))
+		{
+			this.tipSet.add(type);
+			flag = true;
+		}
+		if (flag)
+		{
+			ResBattleTipMessage message = new ResBattleTipMessage();
+			switch (type) {
+			case eTips_ObjAppear:
+				message.tipCode = 100;
+				break;
+			case eTips_Gas:
+				message.tipCode = 101;
+				break;
+			default:
+				break;
+			}
+			MessageUtil.tell_player_message(player, message);
+		}	
 	}
 	/**
 	 * 改变游戏状态
@@ -264,16 +287,25 @@ public class BattleContext extends BattleServer
 		}
 	}
 	/**
-	 * 角色进入战斗
-	 * @param unit
-	 * @param pos
-	 * @param dir
+	 * 请求开始移动
+	 * @param player
+	 * @param _dir
 	 * @return
 	 */
-//	public boolean enterBattle(SSGameUnit unit,Vector3 pos,Vector3 dir)
-//	{
-//		return true;
-//	}
+	public boolean AskMoveDir(SSGameUnit player,CVector2D _dir)
+	{
+		ColVector dir = new ColVector(_dir.x, _dir.y);
+		return moveManager.AskStartMoveDir(player, dir);
+	}
+	/**
+	 * 请求停止移动
+	 * @param player
+	 * @return
+	 */
+	public boolean AskStopMoveDir(SSGameUnit player)
+	{
+		return moveManager.AskStopMoveObject(player, EAskStopMoveType.Dir);
+	}
 	/**
 	 * 加载地图配置
 	 */
@@ -281,57 +313,51 @@ public class BattleContext extends BattleServer
 	{
 //		map = new SSMap();
 //		map.Init(0, "server-config/map-config.xml");
-	}
-	/**
-	 * 是否玩家能选择该神兽
-	 * @param player
-	 * @param beastId
-	 * @return
-	 */
-	private boolean isCanSelectBeast(Player player,long beastId,int beastTypeId)
+	}	
+	public SSHero AddHero(Long playerId,CVector2D pos,CVector2D dir,SSPlayer user,int heroId)
 	{
-		if (player == null)
+		//取得英雄配置表加载基础数据
+		SSHero hero = new SSHero(playerId,this);
+		//hero.LOadHeroConfig
+		user.sHero = hero;
+		hero.BeginActionIdle(false);
+		hero.bornPos = pos;
+		hero.ResetAI();
+		this.EnterBattle(hero, pos, dir);
+		//加载被动技能
+		return hero;
+	}
+	public void EnterBattle(SSGameUnit go,CVector2D pos, CVector2D dir)
+	{
+		SSGameUnit unit = gameObjectMap.get(go.id);
+		if (unit != null)
 		{
-			return false;
+			log.debug("游戏场景中已经存在该物体");
+			return;
 		}
-		if (this.battleState != EBattleServerState.eSSBS_SelectHero)
+		go.curActionInfo.pos = pos;
+		//go.expire = false;
+		gameObjectMap.put(go.id, go);
+		go.curActionInfo.dir = dir;
+		go.enterBattleTime = System.currentTimeMillis();
+		if (go.IfCanImpact())
 		{
-			return false;
+			this.AddMoveObject(go);
 		}
-//		//获取该玩家的信息
-//		RoomMemberData info =getUserBattleInfo(player);
-//		if (info.isM_bHasBeastChoosed() || info.getM_nSelectBeastTypeId() == beastTypeId)
-//		{
-//			return false;
-//		}
-//		boolean ifInBeastList = false;
-//		Iterator<Long> iter = info.getBeastList().iterator();
-//		while (iter.hasNext()) {
-//			Long beast = (Long) iter.next();
-//			if (beast == beastId)
-//			{
-//				ifInBeastList = true;
-//				break;
-//			}
-//		}
-//		if (false == ifInBeastList)
-//		{
-//			return false;
-//		}
-		for (int i=0; i<6; i++)
+	}
+	public void AddMoveObject(SSMoveObject obj)
+	{
+		this.moveManager.AddMoveObject(obj);
+	}
+	public void SyncState(SSGameUnit obj)
+	{
+		if (obj == null)
 		{
-//			if (this.m_battleUserInfo[i] != null){
-//				if (this.m_battleUserInfo[i].getPlayerId() == player.getId())
-//				{
-//					continue;
-//				}
-//				if (this.m_battleUserInfo[i].getM_nSelectBeastTypeId() == beastTypeId)
-//				{
-//					return false;
-//				}
-//			}
+			log.error("不存在英雄");
+			return;
 		}
-		return true;
+		Message message = obj.ConstructObjStateMessage();
+		MessageUtil.tell_battlePlayer_message(this, message);
 	}
 	/**
 	 * 取得随机神兽
@@ -357,7 +383,7 @@ public class BattleContext extends BattleServer
 	 * @param player
 	 * @return
 	 */
-	private BattleUserInfo getUserBattleInfo(Player player)
+	public BattleUserInfo getUserBattleInfo(Player player)
 	{
 		if (player == null)
 		{
@@ -378,28 +404,18 @@ public class BattleContext extends BattleServer
 	}
 	private void PostStartGameMsg()
 	{
-//		for (RoomMemberData data : this.m_battleUserInfo)
-//		{
-//			if (data == null)
-//			{
-//				continue;
-//			}
-//			ResStartGameMessage msg = new ResStartGameMessage();
-//			msg.beastId = data.getSelectedBeastList().get(0);
-//			msg.empireHp = 10;
-//			msg.leagueHp = 10;
-//			msg.playerOrder = beastOrder;
-//			msg.timeLimit = 10;
-//			ResSelectBornPosMessage msg2 = new ResSelectBornPosMessage();
-//			msg2.setBeastId(data.getSelectedBeastList().get(0));
-//			MessageUtil.tell_player_message(PlayerManager.getInstance().getPlayer(data.getPlayerId()), msg);
-//			MessageUtil.tell_player_message(PlayerManager.getInstance().getPlayer(data.getPlayerId()), msg2);
-//		}	
-	}
-	public int getBattleBeast() {
-		return m_battleHero;
-	}
-	public void setBattleBeast(int m_battleBeast) {
-		this.m_battleHero = m_battleBeast;
+		for (int i=0; i<this.m_battleUserInfo.length; i++)
+		{
+			if (this.m_battleUserInfo[i] == null)
+			{
+				continue;
+			}	
+			if (this.m_battleUserInfo[i].sPlayer != null)
+			{
+				this.m_battleUserInfo[i].sHero.SendAppearMessage();
+			}
+			//发送每个玩家的英雄信息
+			//然后通知客户端加载模型
+		}
 	}
 }

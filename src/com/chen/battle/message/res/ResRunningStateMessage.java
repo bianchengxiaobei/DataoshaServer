@@ -7,8 +7,8 @@ import com.chen.message.Message;
 public class ResRunningStateMessage extends Message
 {
 	public long playerId;
-	public int posX;
-	public int posY;	
+	public float posX;
+	public float posY;	
 	public int dirX;
 	public int dirY;
 	public int moveSpeed;
@@ -40,8 +40,8 @@ public class ResRunningStateMessage extends Message
 	public boolean write(IoBuffer buffer)
 	{
 		writeLong(buffer, playerId);
-		writeInt(buffer, posX);
-		writeInt(buffer, posY);
+		writeFloat(buffer, posX);
+		writeFloat(buffer, posY);
 		writeInt(buffer, dirX);
 		writeInt(buffer, dirY);
 		writeInt(buffer, moveSpeed);

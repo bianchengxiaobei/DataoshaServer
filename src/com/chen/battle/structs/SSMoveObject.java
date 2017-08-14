@@ -33,9 +33,10 @@ public abstract class SSMoveObject
 		long timeDiff = now - startMoveTime;
 		if (timeDiff > 500)
 		{
+			System.err.println("时间太大");
 			timeDiff = 500;			
 		}
-		if (timeDiff <= 0)
+		if (timeDiff < 0)
 		{
 			System.err.println("时间不对");
 			timeDiff = 0;
@@ -47,7 +48,7 @@ public abstract class SSMoveObject
 			bIfSpeedChanged = true;
 		}
 		ColVector moveVec = ColVector.Multiply(dir, speed * timeDiff * 0.001f);
-		float moveDist = moveVec.Length();
+		//float moveDist = moveVec.Length();
 		ColSphere sphere = GetColSphere();
 		sphere.point.AddVector(moveVec);
 		stepMoveTarget = sphere;

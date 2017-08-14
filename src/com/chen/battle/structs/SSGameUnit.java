@@ -63,16 +63,16 @@ public abstract class SSGameUnit extends SSMoveObject
 		case Controlled:
 			ResIdleStateMessage res = new ResIdleStateMessage();
 			res.playerId = this.id;
-			res.posX = (int)this.curActionInfo.pos.x;
-			res.posY = (int)this.curActionInfo.pos.y;
+			res.posX = this.curActionInfo.pos.x;
+			res.posY = this.curActionInfo.pos.y;
 			res.dirX = (int)this.curActionInfo.dir.x;
 			res.dirY = (int)this.curActionInfo.dir.y;
 			return res;
 		case Running:
 			ResRunningStateMessage message = new ResRunningStateMessage();
 			message.playerId = this.id;
-			message.posX = (int)this.curActionInfo.pos.x;
-			message.posY = (int)this.curActionInfo.pos.y;
+			message.posX = this.curActionInfo.pos.x;
+			message.posY = this.curActionInfo.pos.y;
 			message.dirX = (int)this.curActionInfo.dir.x;
 			message.dirY = (int)this.curActionInfo.dir.y;
 			message.moveSpeed = (int)GetSpeed();

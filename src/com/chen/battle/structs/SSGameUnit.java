@@ -128,7 +128,10 @@ public abstract class SSGameUnit extends SSMoveObject
 	}
 	
 	public abstract int GetColliderRadius();
-	
+	/*
+	 * 发送移动消息
+	 * @see com.chen.battle.structs.SSMoveObject#OnStartMove(com.chen.move.struct.ColVector)
+	 */
 	@Override
 	public void OnStartMove(ColVector dir)
 	{

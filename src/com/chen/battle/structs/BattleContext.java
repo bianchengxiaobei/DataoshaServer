@@ -24,8 +24,9 @@ import com.chen.move.struct.ColVector;
 import com.chen.move.struct.EAskStopMoveType;
 import com.chen.player.structs.Player;
 import com.chen.server.BattleServer;
+import com.chen.server.Server;
 import com.chen.server.config.BattleConfig;
-
+import com.chen.server.thread.ServerThread;
 import com.chen.utils.MessageUtil;
 
 public class BattleContext extends BattleServer
@@ -93,8 +94,10 @@ public class BattleContext extends BattleServer
 				BattleContext.this.checkLoadingTimeout();
 				BattleContext.this.checkPrepareTimeout();
 				BattleContext.this.checkSelectHeroTimeout();
+				BattleContext.this.DoPlayHeartBeat();
 			}
-		},1000,1000);
+		},100,100);
+		//((ServerThread)this.thread_pool.get(Server.DEFAULT_MAIN_THREAD)).addTimeEvent(event);
 	}
 	public void EnterBattleState(Player player)
 	{
@@ -233,6 +236,14 @@ public class BattleContext extends BattleServer
 		{
 			this.setBattleState(EBattleServerState.eSSBS_Loading, true);
 		}
+	}
+	public void DoPlayHeartBeat()
+	{
+		if (this.battleState != EBattleServerState.eSSBS_Playing)
+		{
+			return;
+		}
+		this.moveManager.OnHeartBeat();
 	}
 	public void BoradTipsByType(EBattleTipType type,Player player)
 	{

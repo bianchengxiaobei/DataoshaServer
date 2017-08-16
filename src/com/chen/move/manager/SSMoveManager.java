@@ -12,6 +12,7 @@ import com.chen.move.struct.SSMoveObjectStatus;
 public class SSMoveManager
 {
 	public Set<SSMoveObject> allMoveObjectSet = new HashSet<>();
+	private SSMoveObject[] heartBeatTempArray = new SSMoveObject[1024];
 	public void AddMoveObject(SSMoveObject object)
 	{
 		allMoveObjectSet.remove(object);
@@ -68,6 +69,82 @@ public class SSMoveManager
 			
 		}
 		return true;
+	}
+	/**
+	 * 移动心跳检测
+	 */
+	public void OnHeartBeat()
+	{
+		long now = System.currentTimeMillis();
+		int moveObjectSize = this.allMoveObjectSet.size();
+		int index = 0;
+		for (SSMoveObject object : this.allMoveObjectSet)
+		{
+			if (object.moveStatus == SSMoveObjectStatus.SSMoveObjectStatus_Stand)
+			{
+				continue;
+			}
+			if (object.moveType == ESSMoveObjectMoveType.Dir && object.dir.equals(object.askMoveDir) == false)
+			{
+				ColVector nowDir = object.dir;
+				object.SetDir(object.askMoveDir);
+				object.CalculateStepMoveTarget(now);
+				//检测是否碰撞
+				//如果有碰撞就将方向改回原来的方向->nowDir;
+				//如果没有,发送消息
+				object.OnStartMove(object.dir);
+			}
+			object.CalculateStepMoveTarget(now);
+			this.heartBeatTempArray[index++] = object;
+		}
+		int moveTargetNum = 0;
+		do
+		{
+			moveTargetNum = 0;
+			for (int i=0; i<moveObjectSize; i++)
+			{
+				SSMoveObject object = this.heartBeatTempArray[i];
+				if (object == null) continue;
+				float moveDist = this.TryMove(object, now);
+				if (moveDist > 0)
+				{
+					System.out.println("可以移动");
+					++moveTargetNum;
+					CheckTargetMoveStatus(object, moveDist);
+					this.heartBeatTempArray[i] = null;
+				}
+			}
+		}while(moveTargetNum > 0);
+		for (int i=0; i<moveObjectSize; i++)
+		{
+			SSMoveObject obj = this.heartBeatTempArray[i];
+			if (obj == null)
+			{
+				continue;
+			}
+			obj.Stop(now, true);
+		}
+		for (SSMoveObject object : this.allMoveObjectSet)
+		{
+			if (object.moveStatus == SSMoveObjectStatus.SSMoveObjectStatus_Stand)
+			{
+				continue;
+			}
+			if (object.moveStatus == SSMoveObjectStatus.SSMoveObjectStatus_ForceMove)
+			{
+				continue;
+			}
+			object.CalculateStepMoveTarget(now+100);
+			//检测是否碰撞
+			//object.Stop(now, true);
+		}
+	}
+	private void CheckTargetMoveStatus(SSMoveObject obj,float moveDist)
+	{
+		if (obj.moveType != ESSMoveObjectMoveType.Target)
+		{
+			return;
+		}
 	}
 	private boolean AskStartMoveCheck(SSMoveObject obj)
 	{

@@ -4,6 +4,7 @@ public class ColVector
 {
 	public float x;
 	public float y;
+	
 	public ColVector(float x,float y)
 	{
 		this.x = x;
@@ -13,6 +14,14 @@ public class ColVector
 	{
 		this.x = v.x;
 		this.y = v.y;
+	}
+	public boolean equals(ColVector other)
+	{
+		if (this.x != other.x || this.y != other.y)
+		{
+			return false;
+		}
+		return true;
 	}
 	public float Length()
 	{

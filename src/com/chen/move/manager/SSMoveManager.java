@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.chen.battle.structs.SSMoveObject;
+import com.chen.move.struct.ColSphere;
 import com.chen.move.struct.ColVector;
 import com.chen.move.struct.EAskStopMoveType;
 import com.chen.move.struct.ESSMoveObjectMoveType;
@@ -138,6 +139,24 @@ public class SSMoveManager
 			//检测是否碰撞
 			//object.Stop(now, true);
 		}
+	}
+	
+	public boolean ResetPos(SSMoveObject obj,ColVector pos,boolean bIfImpact)
+	{
+		ColVector outPos = null;
+		if (bIfImpact)
+		{
+			
+		}
+		else
+		{
+			outPos = pos;
+		}
+		ColSphere sphere = obj.GetColSphere();
+		sphere.point = outPos;
+		obj.stepMoveTarget = sphere;
+		obj.Teleport(System.currentTimeMillis());
+		return true;
 	}
 	private void CheckTargetMoveStatus(SSMoveObject obj,float moveDist)
 	{

@@ -40,8 +40,8 @@ public class BattleManager
 {
 	private Logger log = LogManager.getLogger(BattleManager.class);
 	//战斗线程
-	private ConcurrentHashMap<Long, BattleServer> mServers = new ConcurrentHashMap<Long, BattleServer>();
-	private ConcurrentHashMap<Long, Battle> allBattleMap = new ConcurrentHashMap<Long, Battle>();
+	public ConcurrentHashMap<Long, BattleServer> mServers = new ConcurrentHashMap<Long, BattleServer>();
+	public ConcurrentHashMap<Long, Battle> allBattleMap = new ConcurrentHashMap<Long, Battle>();
 	private static Object obj = new Object();
 	private static BattleManager manager;
 	public static long battleId = 0;
@@ -241,5 +241,10 @@ public class BattleManager
 			return null;
 		}
 		return (BattleContext) mServers.get(player.getBattleInfo().getBattleId());
+	}
+	
+	public void OnBattleHeartBeat()
+	{
+		
 	}
 }

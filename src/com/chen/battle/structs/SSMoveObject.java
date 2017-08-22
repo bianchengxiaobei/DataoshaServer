@@ -67,6 +67,17 @@ public abstract class SSMoveObject
 		}
 		return dist;
 	}
+	/**
+	 * 传送，和位移基本相同，但是不算是移动，不触发位移的回调
+	 * @param now
+	 */
+	public void Teleport(long now)
+	{
+		ColSphere pColSphere = stepMoveTarget;
+		beforeMovePos = pColSphere.point;
+		OnMoved(pColSphere.point);
+		startMoveTime = now;
+	}
 	public void Stop(long now,boolean bCallback)
 	{
 		this.moveStatus = SSMoveObjectStatus.SSMoveObjectStatus_Stand;

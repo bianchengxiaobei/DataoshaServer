@@ -8,16 +8,18 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.chen.battle.manager.BattleManager;
 import com.chen.battle.message.res.ResBattleTipMessage;
 import com.chen.battle.message.res.ResEnterSceneMessage;
 import com.chen.battle.message.res.ResGamePrepareMessage;
 import com.chen.battle.message.res.ResSceneLoadedMessage;
 import com.chen.battle.message.res.ResSelectHeroMessage;
+import com.chen.battle.skill.manager.SSEffectManager;
 import com.chen.message.Message;
 import com.chen.move.manager.SSMoveManager;
 import com.chen.move.struct.ColVector;
@@ -36,12 +38,15 @@ public class BattleContext extends BattleServer
 	private EBattleServerState battleState = EBattleServerState.eSSBS_SelectHero;
 	private long battleId;
 	private long battleStateTime;
+	private long lastCheckPlayTimeout;
+	private long battleFinishProtectTime = 0;
 	private BattleUserInfo[] m_battleUserInfo = new BattleUserInfo[maxMemberCount];
 	
 	public Map<Long, SSGameUnit> gameObjectMap = new HashMap<>();
 	public Set<EBattleTipType> tipSet = new HashSet<>();
 	public SSMoveManager moveManager;
-
+	public SSEffectManager effectManager;
+	public AtomicInteger effectId = new AtomicInteger(0);
 	public static final int maxMemberCount = 6; 
 	public static final int timeLimit = 200000;
 	public static final int prepareTimeLimit = 5000;
@@ -61,9 +66,6 @@ public class BattleContext extends BattleServer
 	public EBattleServerState getBattleState() {
 		return battleState;
 	}
-	public void setBattleState(EBattleServerState battleState) {
-		this.battleState = battleState;
-	}
 	public BattleUserInfo[] getM_battleUserInfo() {
 		return m_battleUserInfo;
 	}
@@ -76,6 +78,7 @@ public class BattleContext extends BattleServer
 		this.battleId = battleId;
 		this.battleType = type;
 		this.moveManager = new SSMoveManager();
+		this.effectManager = new SSEffectManager();
 	}
 	
 	@Override
@@ -91,13 +94,29 @@ public class BattleContext extends BattleServer
 			@Override
 			public void run() 
 			{			
-				BattleContext.this.checkLoadingTimeout();
-				BattleContext.this.checkPrepareTimeout();
-				BattleContext.this.checkSelectHeroTimeout();
-				BattleContext.this.DoPlayHeartBeat();
+				BattleContext.this.OnHeartBeat(System.currentTimeMillis(), 100);
+				if (BattleContext.this.battleState == EBattleServerState.eSSBS_Finished)
+				{
+					BattleContext.this.stop(true);
+					BattleManager.getInstance().allBattleMap.remove(BattleContext.this.battleId);
+					BattleManager.getInstance().mServers.remove(BattleContext.this.battleId, BattleContext.this);
+				}
 			}
 		},100,100);
 		//((ServerThread)this.thread_pool.get(Server.DEFAULT_MAIN_THREAD)).addTimeEvent(event);
+	}
+	public void OnHeartBeat(long now,long tickSpan)
+	{
+		boolean res = CheckPlayTimeout(now);
+		if (res)
+		{
+			//战斗结束直接返回
+			return;
+		}
+		this.checkSelectHeroTimeout();
+		this.checkPrepareTimeout();
+		this.checkLoadingTimeout();
+		this.DoPlayHeartBeat();
 	}
 	public void EnterBattleState(Player player)
 	{
@@ -224,7 +243,50 @@ public class BattleContext extends BattleServer
 		}
 		
 		this.PostStartGameMsg();
-		this.setBattleState(EBattleServerState.eSSBS_Playing);
+		this.setBattleState(EBattleServerState.eSSBS_Playing,false);
+	}
+	public boolean CheckPlayTimeout(long now)
+	{
+		if (this.lastCheckPlayTimeout == 0)
+		{
+			this.lastCheckPlayTimeout = now;
+			return false;
+		}
+		if (now - this.lastCheckPlayTimeout < 10000)
+		{
+			return false;
+		}
+		this.lastCheckPlayTimeout = now;
+		boolean bAllUserOffline = true;
+		for (int i=0;i<maxMemberCount;i++)
+		{
+			if (this.m_battleUserInfo[i] != null)
+			{
+				SSPlayer player = this.m_battleUserInfo[i].sPlayer;
+				//如果有一个人连上去的话，就没有所有人断线
+				if (player != null && player.bIfConnect == true)
+				{
+					bAllUserOffline = false;
+					break;
+				}
+			}		
+		}
+		//如果玩家在线的话，战斗保护时间重置
+		if (bAllUserOffline == false)
+		{
+			this.battleFinishProtectTime = 0;
+		}
+		if (bAllUserOffline && this.battleFinishProtectTime == 0)
+		{
+			this.battleFinishProtectTime = now + 60000;
+		}
+		if (bAllUserOffline && now > this.battleFinishProtectTime)
+		{
+			log.debug("所有玩家离线，战斗结束");
+			Finish();
+			return true;
+		}
+		return false;
 	}
 	public void checkPrepareTimeout()
 	{
@@ -309,6 +371,24 @@ public class BattleContext extends BattleServer
 		return moveManager.AskStartMoveDir(player, dir);
 	}
 	/**
+	 * 重置坐标
+	 * @param player
+	 * @param pos
+	 * @param dir
+	 * @param bIfImpact
+	 * @return
+	 */
+	public boolean ResetPos(SSGameUnit player,CVector2D pos,boolean bIfImpact)
+	{
+		ColVector cPos = new ColVector(pos.x,pos.y);		
+		boolean r = this.moveManager.ResetPos(player, cPos, bIfImpact);
+		if (r)
+		{
+			this.SyncState(player);
+		}
+		return r;
+	}
+	/**
 	 * 请求停止移动
 	 * @param player
 	 * @return
@@ -317,6 +397,19 @@ public class BattleContext extends BattleServer
 	{
 		return moveManager.AskStopMoveObject(player, EAskStopMoveType.Dir);
 	}
+	public boolean AskStopMoveObjectAll(SSGameUnit player)
+	{
+		return moveManager.AskStopMoveObject(player, EAskStopMoveType.All);
+	}
+	public boolean AskStopMoveTarget(SSGameUnit player)
+	{
+		return moveManager.AskStopMoveObject(player, EAskStopMoveType.Target);
+	}
+	public boolean AskStopMoveObjectForceMove(SSGameUnit player)
+	{
+		return moveManager.AskStopMoveObject(player, EAskStopMoveType.ForceMove);
+	}
+	
 	/**
 	 * 加载地图配置
 	 */
@@ -325,6 +418,14 @@ public class BattleContext extends BattleServer
 //		map = new SSMap();
 //		map.Init(0, "server-config/map-config.xml");
 	}	
+	/**
+	 * 取得场景中独立无二的特效Id
+	 * @return
+	 */
+	public int GenerateEffectId()
+	{
+		return effectId.incrementAndGet();
+	}
 	public SSHero AddHero(Long playerId,CVector2D pos,CVector2D dir,SSPlayer user,int heroId)
 	{
 		//取得英雄配置表加载基础数据
@@ -355,6 +456,20 @@ public class BattleContext extends BattleServer
 		{
 			this.AddMoveObject(go);
 		}
+	}
+	/**
+	 * 战斗结束
+	 */
+	public void Finish()
+	{
+		if (this.battleState == EBattleServerState.eSSBS_Finished)
+		{
+			return;
+		}
+		//通知客户端战斗结束
+		setBattleState(EBattleServerState.eSSBS_Finished,true);
+		//通知客户端那方赢了
+		
 	}
 	public void AddMoveObject(SSMoveObject obj)
 	{
@@ -410,6 +525,18 @@ public class BattleContext extends BattleServer
 			{
 				return this.m_battleUserInfo[i];
 			}
+		}
+		return null;
+	}
+	public SSGameUnit GetGameObjectById(long id)
+	{
+		if (id <= 0)
+		{
+			return null;
+		}
+		if (this.gameObjectMap.containsKey(id))
+		{
+			return this.gameObjectMap.get(id);
 		}
 		return null;
 	}

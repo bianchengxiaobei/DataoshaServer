@@ -6,9 +6,13 @@ import com.chen.battle.ai.SSAI;
 import com.chen.battle.message.res.ResGoAppearMessage;
 import com.chen.battle.message.res.ResIdleStateMessage;
 import com.chen.battle.message.res.ResRunningStateMessage;
+import com.chen.battle.skill.SSSkill;
+import com.chen.battle.skill.structs.ISSMoveObjectHolder;
+import com.chen.battle.skill.structs.SSSkillConfig;
 import com.chen.message.Message;
 import com.chen.move.struct.ColSphere;
 import com.chen.move.struct.ColVector;
+import com.chen.parameter.structs.EParameterCate;
 import com.chen.utils.MessageUtil;
 
 public abstract class SSGameUnit extends SSMoveObject
@@ -19,6 +23,10 @@ public abstract class SSGameUnit extends SSMoveObject
 	public SGOActionStateInfo curActionInfo;
 	public long enterBattleTime;
 	public boolean bExpire;
+	public ISSMoveObjectHolder moveHolder;
+	public SSSkill normalAttackSkill;
+	public int moveEffectId;//移动效果
+	public boolean bIfActiveMove;//是否激活移动
 	public SSGameUnit(long playerId,BattleContext battle)
 	{
 		this.id = playerId;
@@ -46,10 +54,37 @@ public abstract class SSGameUnit extends SSMoveObject
 			battle.SyncState(this);
 		}
 	}
+	/**
+	 * 结束控制状态，转成Idle，并通知客户端进入Idle
+	 * @param asyn
+	 */
+	public void EndActionController(boolean asyn)
+	{
+		if (this.curActionInfo.eOAS == EGOActionState.Controlled)
+		{
+			BeginActionIdle(asyn);
+			this.curActionInfo.time = System.currentTimeMillis();
+		}
+	}
+	
 	public void SetGOActionState(EGOActionState state)
 	{
 		this.curActionInfo.eOAS = state;
 		this.curActionInfo.time = System.currentTimeMillis();
+	}
+	/**
+	 * 设置移动效果，如果当前有移动先移除
+	 * @param moveEffectId
+	 * @param active
+	 */
+	public void SetMoveEffect(int moveEffectId,boolean active)
+	{
+		if (moveEffectId != 0)
+		{
+			battle.effectManager.RemoveEffect(moveEffectId);
+			this.moveEffectId = moveEffectId;
+			bIfActiveMove = active;
+		}
 	}
 	/**
 	 * 构建角色状态消息
@@ -95,7 +130,14 @@ public abstract class SSGameUnit extends SSMoveObject
 	{
 		return IsDead() == false;
 	}
-
+	/**
+	 * 是否能成为被攻击对象(没有死亡)
+	 * @return
+	 */
+	public boolean IfCanBeTarget()
+	{
+		return curActionInfo.eOAS != EGOActionState.Dead;
+	}
 	public boolean IsDead()
 	{
 		return this.curActionInfo.eOAS == EGOActionState.Dead || bExpire == true;
@@ -126,7 +168,10 @@ public abstract class SSGameUnit extends SSMoveObject
 	{
 		return 100;
 	}
-	
+	public int GetFPData(EParameterCate cate)
+	{
+		return 3;
+	}
 	public abstract int GetColliderRadius();
 	/*
 	 * 发送移动消息
@@ -165,7 +210,10 @@ public abstract class SSGameUnit extends SSMoveObject
 //			m_moveHolder->OnStopMove();
 		this.ai.OnMoveBlock();
 	}
-	
+	public void OnTeleport()
+	{
+		this.ai.OnTeleport();
+	}
 	private void CheckBeginActionFree(boolean asyn)
 	{
 		if (this.curActionInfo.eOAS.value >= EGOActionState.PassiveState.value)
@@ -173,5 +221,24 @@ public abstract class SSGameUnit extends SSMoveObject
 			return;
 		}
 		BeginActionIdle(asyn);
+	}
+	public boolean IfInReleaseSkillRange(SSGameUnit target,SSSkillConfig config,float addDist)
+	{
+		if (config == null)
+		{
+			return false;
+		}
+		if (target != null)
+		{
+			if (config.bIsNormalAttack)
+			{
+				return false;
+			}
+			else
+			{
+				return GetCurPos().CanWatch(config.releaseDis + addDist, target.GetCurPos());
+			}
+		}
+		return true;
 	}
 }
